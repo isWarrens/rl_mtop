@@ -97,6 +97,7 @@ class TopEnvironment(Environment):
         self.west = row[2] - dy
         self.east = row[3] + dy
 
+        # 生成的自己地图
         if project_dir is None:
             project_dir = os.getcwd()
         data_dir = os.path.join(project_dir, "data")
@@ -166,6 +167,30 @@ class TopEnvironment(Environment):
 
         cursor.close()
         conn.close()
+
+    # 生成地图，我们只用一个地图数据，因不需要此增量
+    def create_graph(self):
+        # 读取CSV文件
+        data = pd.read_csv('bay_locations.csv')
+
+        # 根据CSV文件中的经纬度计算区域范围
+        south = data['lat'].min()
+        north = data['lat'].max()
+        west = data['lon'].min()
+        east = data['lon'].max()
+
+        # 从OpenStreetMap获取地图数据
+        graph = ox.graph_from_bbox(south=south, north=north, west=west, east=east, network_type='walk')
+
+        # 打印图形节点和边的数量
+        print("graph nodes: ", len(graph.nodes), ", edges: ", len(graph.edges))
+
+        # 可选：绘制地图
+        ox.plot_graph(graph)
+
+        # 可选：保存地图为图形文件
+        ox.save_graphml(graph, filename='graph.gml')
+        self.graph = graph
 
     def close(self):
         pass
@@ -481,4 +506,25 @@ class StrictResourceTargetTopEnvironment(TopEnvironment):
             if done:
                 break
         return s, rewards, done, {}
+
+if __name__ == "__main__":
+    # 读取CSV文件
+    project_dir = os.getcwd()
+    data_dir = os.path.join(project_dir, "data")
+    data = pd.read_csv(data_dir + '/bay_sensors_vio_loc_03_19.csv')
+
+    # 根据CSV文件中的经纬度计算区域范围
+    south = data['lat'].min()
+    north = data['lat'].max()
+    west = data['lon'].min()
+    east = data['lon'].max()
+
+    # 从OpenStreetMap获取地图数据
+    graph = ox.graph_from_bbox(south=south, north=north, west=west, east=east, network_type='walk')
+
+    # 打印图形节点和边的数量
+    print("graph nodes: ", len(graph.nodes), ", edges: ", len(graph.edges))
+
+    # 可选：绘制地图
+    ox.plot_graph(graph)
 
