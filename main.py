@@ -20,10 +20,38 @@ from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.utils.parameters import ExponentialParameter, LinearParameter, Parameter
 from mushroom_rl.utils.replay_memory import PrioritizedReplayMemory
 
-from environment import TopEnvironment, StrictResourceTargetTopEnvironment
+from environment import TopEnvironment
 from smdp_dqn import SMDPDQN
 
 from area import AreaInfo
+from preProcess.utils import change_node_to_int
+class MyCore(Core):
+    def _step(self, render):
+        # 每次选动作之前把司机状态更新
+        # 更新每个司机的状态
+        for driver in self.mdp.drivers:
+            if driver.on_road == 1:
+                driver.start_time += self.mdp.timestep
+                if self.mdp.graph.get_edge_data(driver.Request.origin,driver.Request.destination) / driver.speed <= driver.start_time:
+                    driver.on_road = 0
+                    driver.pos = driver.Request.destination
+
+        # 选出来的点
+        action = self.agent.draw_action(self._state)
+        next_state, reward, absorbing, _ = self.mdp.step(action)
+
+        self._episode_steps += 1
+
+        if render:
+            self.mdp.render()
+
+        last = not (
+                self._episode_steps < self.mdp.info.horizon and not absorbing)
+
+        state = self._state
+        self._state = next_state.copy()
+
+        return state, action, reward, next_state, absorbing, last
 
 class ResourceObservation:
     """
@@ -31,52 +59,30 @@ class ResourceObservation:
     """
 
     def __init__(self, use_weekdays=False, distance_normalization=3000):
-        self.shape = None
+        self.shape = 4
         self.model = None
         self.shortest_paths_lengths = None
         self.distance_normalization = distance_normalization
         self.use_weekdays = use_weekdays
 
-    def init(self, env):
-        self.shortest_paths_lengths = {}
-        for edge in env.resource_edges.values():
-            self.shortest_paths_lengths[edge] = dict(nx.shortest_path_length(env.graph, target=edge[0], weight='length'))
-        self.shape = (len(env.devices), 4 + 1 + 1 + 1 + (7 if self.use_weekdays else 0))#(device数量,7)
-
     def __len__(self):
         return np.prod(self.shape)
 
     def __call__(self, env, *args, **kwargs):
-        if self.shape is None:
-            self.init(env)
 
         state = np.zeros(self.shape)
 
-        dt = datetime.datetime.fromtimestamp(env.time)
-        weekday = dt.weekday()#周一到周日对应0~6
-        t = (dt - datetime.datetime.combine(dt.date(), datetime.time())).seconds
-        t = (t - env.start_hour * 60 * 60) / ((env.end_hour - env.start_hour) * (60 * 60))
-
-        for i, device in enumerate(env.device_ordering):
-            state[i, env.spot_states[device]] = 1
+        for i, driver in enumerate(env.drivers):
             '''
-            env.spot_states：一个dict，关于device_id和当前状态
-            self.FREE: "blue",
-            self.OCCUPIED: 'green',
-            self.VIOLATION: 'red',
-            self.VISITED: 'yellow'
+                1.State[i,0]:free状态是1 占用是0
+                4.State[i,1]:graph的所有node。
+                5.State[i,2]:时间戳
+                6.state[i,3] 每个司机的收益
             '''
-            if self.use_weekdays:
-                state[i, 4+weekday] = 1#index在4以后代表周几
-            state[i, -3] = t
-            state[i, -2] = max(2, (env.time - env.potential_violation_times[device]) / env.allowed_durations[device]) \
-                if device in env.potential_violation_times and env.spot_states[device] != TopEnvironment.VISITED else -1
-            '''
-            env.time:当前时间
-            env.potential_violation_times:关于device_id和arrval+duration的dictionary，正处于violation的device
-            env.allowed_durations[device]:关于device_id和duration的dictionary
-            '''
-            state[i, -1] = self.shortest_paths_lengths[env.resource_edges[device]][env.position] / self.distance_normalization
+            state[i, 0] = 1 if driver.on_road == 0 else 0
+            state[i, 1] = len(env.graph)
+            state[i, 2] = env.time
+            state[i, 3] = env.drivers[i].money
 
         return state
 
@@ -159,41 +165,29 @@ class ResourceObservation2:
 
         return state
 
-
+'''
+他这里的edge_ordering是
+'''
 class GraphConvolutionResourceNetwork(nn.Module):
     n_features = 32
     n_scaling_features = 64
 
     def __init__(self, input_shape, output_shape,
-                 graph=None, edge_ordering=None, device_ordering=None, resource_edges=None, allow_wait=False,
-                 long_term_q=False, resource_embeddings=0, nn_scaling=False,
+                 graph=None, long_term_q=False, resource_embeddings=0, nn_scaling=False, nodes_num=0,
                  load_path=None, **kwargs):
         super().__init__()
 
         n_output = output_shape[-1]
-        self.n_resources = len(device_ordering)
-        self.n_edges = len(edge_ordering)
-        self.allow_wait = allow_wait
-        self.use_long_term_q = long_term_q
         self.nn_scaling = nn_scaling
+        self.actions_num = nodes_num
 
-        distances = torch.zeros((len(edge_ordering), len(device_ordering)))
+        distances = torch.zeros(len(graph.number_of_nodes()), graph.number_of_nodes())
         distances = distances / distances.max()
         self.register_buffer("distances", distances)
 
-        shortest_paths = {e: dict(nx.shortest_path_length(graph, target=e[0], weight='length')) for e in edge_ordering}
-        '''
-        为所有的edge的点e[0]寻找graph中的最短距离
-        只给定了target,得出的是所有point对于target的dictionary
-        '''
-
-
-        for e, edge in enumerate(edge_ordering):
-            for d, device in enumerate(device_ordering):
-                self.distances[e, d] = min(shortest_paths[edge][resource_edges[device][0]],
-                                           shortest_paths[edge][resource_edges[device][1]])
-        #得到每个device对应的edge到每个edge的最短距离
-
+        for node1 in graph.nodes():
+            for node2 in graph.nodes():
+                distances[change_node_to_int(node1)][change_node_to_int(node2)] = nx.shortest_path_length(graph, node1, node2)
         if nn_scaling:
             self.scaling = torch.nn.Sequential(
                 torch.nn.Linear(1, self.n_scaling_features),
@@ -205,7 +199,7 @@ class GraphConvolutionResourceNetwork(nn.Module):
             self.scaling = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
             self.scaling.data.uniform_()
 
-        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(self.n_resources, resource_embeddings), requires_grad=True)
+        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(self.actions_num, resource_embeddings), requires_grad=True)
         self.resource_embeddings.data.uniform_()
 
         self.init_encoding = torch.nn.Sequential(
@@ -224,13 +218,6 @@ class GraphConvolutionResourceNetwork(nn.Module):
         if self.use_long_term_q:
             self.long_term_q = torch.nn.Sequential(
                 torch.nn.Linear(self.n_features, self.n_features),
-                torch.nn.ReLU(),
-                torch.nn.Linear(self.n_features, 1)
-            )
-
-        if allow_wait:
-            self.wait_model = torch.nn.Sequential(
-                torch.nn.Linear(len(edge_ordering) * input_shape[-1], self.n_features),
                 torch.nn.ReLU(),
                 torch.nn.Linear(self.n_features, 1)
             )
@@ -523,7 +510,6 @@ def experiment(mdp, params, prob=None):
                                                    step_size=1,
                                                    gamma=params['lr_decay'],
                                                    last_epoch=-1) # params['max_steps'] // params['train_frequency']
-
     # Algorithm
     core = Core(agent, mdp)
 
@@ -721,7 +707,7 @@ def train_top(external_params=None):
     else:
         observation = ResourceObservation(use_weekdays=params['use_weekdays'])
     db_file = os.path.join(PROJECT_DIR, "dataset.db")#载入数据库文件
-    mdp = StrictResourceTargetTopEnvironment(db_file, params['area'], observation,
+    mdp =TopEnvironment(db_file, params['area'], observation,
                                              gamma=params['gamma'],
                                              speed=speed,
                                              start_hour=params['start_hour'],
