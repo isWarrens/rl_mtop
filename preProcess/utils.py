@@ -7,9 +7,10 @@ import pandas as pd
 
 def create_graph():
     project_dir = os.path.dirname(os.getcwd())
-    data_dir = os.path.join(project_dir, "data")
+    data_dir = '/home/lighthouse/rl_mtop/data'
     # 读取CSV文件
     data = pd.read_csv(data_dir + '/dis_CBD_twoPs_03_19.csv')
+    print(data_dir)
     # 创建一个无向图
     graph = nx.Graph()
 
@@ -19,7 +20,11 @@ def create_graph():
         nodes = row.twoPs.split('_')
         node1 = nodes[0]
         node2 = nodes[1]
-
+        try:
+            int(node1.replace("A", ""))
+            int(node2.replace("A", ""))
+        except ValueError:
+            continue
         # 检查节点是否已经存在于图中
         if node1 not in graph.nodes:
             graph.add_node(node1)
@@ -63,7 +68,7 @@ class Driver:
 # 从CSV文件中导入请求
 def import_requests_from_csv():
     project_dir = os.path.dirname(os.getcwd())
-    data_dir = os.path.join(project_dir, "data")
+    data_dir = '/home/lighthouse/rl_mtop/data'
     file_path = data_dir + "/bay_vio_data_03_19.csv"
     requests = [[]]
     data = pd.read_csv(file_path)
@@ -79,7 +84,10 @@ def import_requests_from_csv():
 
 
 def change_node_to_int(node):
-    return int(node.replace("A", ""))
+    try:
+        return int(node.replace("A", ""))
+    except ValueError:
+        return 0
 
 
 if __name__ == '__main__':

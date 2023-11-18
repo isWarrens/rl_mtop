@@ -25,6 +25,8 @@ from smdp_dqn import SMDPDQN
 
 from area import AreaInfo
 from preProcess.utils import change_node_to_int
+
+
 class MyCore(Core):
     def _step(self, render):
         # 每次选动作之前把司机状态更新
@@ -32,7 +34,8 @@ class MyCore(Core):
         for driver in self.mdp.drivers:
             if driver.on_road == 1:
                 driver.start_time += self.mdp.timestep
-                if self.mdp.graph.get_edge_data(driver.Request.origin,driver.Request.destination) / driver.speed <= driver.start_time:
+                if self.mdp.graph.get_edge_data(driver.Request.origin,
+                                                driver.Request.destination) / driver.speed <= driver.start_time:
                     driver.on_road = 0
                     driver.pos = driver.Request.destination
 
@@ -53,10 +56,13 @@ class MyCore(Core):
 
         return state, action, reward, next_state, absorbing, last
 
+
 class ResourceObservation:
     """
     This class parses the state to to an observation processable for the neural network.
     """
+    def init(self, env):
+        self.shape = (len(env.drivers), 4)
 
     def __init__(self, use_weekdays=False, distance_normalization=3000):
         self.shape = 4
@@ -69,7 +75,6 @@ class ResourceObservation:
         return np.prod(self.shape)
 
     def __call__(self, env, *args, **kwargs):
-
         state = np.zeros(self.shape)
 
         for i, driver in enumerate(env.drivers):
@@ -105,7 +110,8 @@ class ResourceObservation2:
     def init(self, env):
         self.shortest_paths_lengths = {}
         for edge in env.resource_edges.values():
-            self.shortest_paths_lengths[edge] = dict(nx.shortest_path_length(env.graph, target=edge[0], weight='length'))
+            self.shortest_paths_lengths[edge] = dict(
+                nx.shortest_path_length(env.graph, target=edge[0], weight='length'))
         '''
         求解从源节点到目标节点的最短路径。
         Return type:	list
@@ -124,9 +130,9 @@ class ResourceObservation2:
         dt = datetime.datetime.fromtimestamp(env.time)
         weekday = dt.weekday()
         t = (dt - datetime.datetime.combine(dt.date(), datetime.time())).seconds
-        #当前时刻与一天开始时刻之间的差值转换到秒
+        # 当前时刻与一天开始时刻之间的差值转换到秒
         t = (t - env.start_hour * 60 * 60) / ((env.end_hour - env.start_hour) * (60 * 60))
-        #从开始时刻到现在的时间
+        # 从开始时刻到现在的时间
 
         for i, device in enumerate(env.device_ordering):
             distance = self.shortest_paths_lengths[env.resource_edges[device]][env.position]
@@ -149,12 +155,14 @@ class ResourceObservation2:
                 device_state = TopEnvironment.VIOLATION
             state[i, device_state] = 1
             if self.use_weekdays:
-                state[i, 4+weekday] = 1
+                state[i, 4 + weekday] = 1
 
             state[i, -5] = walk_time / 3600.
             state[i, -4] = t
             state[i, -3] = t + walk_time / ((env.end_hour - env.start_hour) * (60 * 60))
-            state[i, -2] = min(2, (env.time + walk_time - env.potential_violation_times[device]) / env.allowed_durations[device]) \
+            state[i, -2] = min(2,
+                               (env.time + walk_time - env.potential_violation_times[device]) / env.allowed_durations[
+                                   device]) \
                 if device in env.potential_violation_times and env.spot_states[device] != TopEnvironment.VISITED else -1
             '''
             env.time:当前时间
@@ -165,29 +173,37 @@ class ResourceObservation2:
 
         return state
 
+
 '''
 他这里的edge_ordering是
 '''
+
+
 class GraphConvolutionResourceNetwork(nn.Module):
     n_features = 32
     n_scaling_features = 64
+
+    def init(self, env):
+        self.shape = (len(env.graph.drivers), 4)
 
     def __init__(self, input_shape, output_shape,
                  graph=None, long_term_q=False, resource_embeddings=0, nn_scaling=False, nodes_num=0,
                  load_path=None, **kwargs):
         super().__init__()
 
+        self.shape = None
         n_output = output_shape[-1]
         self.nn_scaling = nn_scaling
         self.actions_num = nodes_num
 
-        distances = torch.zeros(len(graph.number_of_nodes()), graph.number_of_nodes())
+        distances = torch.zeros(graph.number_of_nodes() + 3, graph.number_of_nodes() + 3)
         distances = distances / distances.max()
         self.register_buffer("distances", distances)
 
         for node1 in graph.nodes():
             for node2 in graph.nodes():
-                distances[change_node_to_int(node1)][change_node_to_int(node2)] = nx.shortest_path_length(graph, node1, node2)
+                distances[change_node_to_int(node1)][change_node_to_int(node2)] = nx.shortest_path_length(graph, node1,
+                                                                                                          node2)
         if nn_scaling:
             self.scaling = torch.nn.Sequential(
                 torch.nn.Linear(1, self.n_scaling_features),
@@ -199,7 +215,8 @@ class GraphConvolutionResourceNetwork(nn.Module):
             self.scaling = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
             self.scaling.data.uniform_()
 
-        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(self.actions_num, resource_embeddings), requires_grad=True)
+        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(self.actions_num, resource_embeddings),
+                                                      requires_grad=True)
         self.resource_embeddings.data.uniform_()
 
         self.init_encoding = torch.nn.Sequential(
@@ -214,16 +231,6 @@ class GraphConvolutionResourceNetwork(nn.Module):
             nn.ReLU(),
             torch.nn.Linear(self.n_features, 1)
         )
-
-        if self.use_long_term_q:
-            self.long_term_q = torch.nn.Sequential(
-                torch.nn.Linear(self.n_features, self.n_features),
-                torch.nn.ReLU(),
-                torch.nn.Linear(self.n_features, 1)
-            )
-
-        if load_path is not None:
-            self.state_dict(torch.load(load_path))
 
     def forward(self, state, action=None):
         res_enc = self.resource_embeddings.repeat(state.shape[0], 1, 1)
@@ -314,16 +321,16 @@ def compute_J(dataset, gamma=1.):
 
     """
     js = list()
-    rewardList=list()
-    utilityList=list()
-    fairList=list()
+    rewardList = list()
+    utilityList = list()
+    fairList = list()
     j = 0.
     episode_steps = 0
     if gamma != 1:
         for i in range(len(dataset)):
             x = dataset[i][2]
             d = x[0] if not np.isscalar(x) else x
-            reward=d[3]
+            reward = d[3]
             # reward+=AreaInfo.caculRewardStep(d)
 
             j += gamma ** episode_steps * reward
@@ -334,10 +341,10 @@ def compute_J(dataset, gamma=1.):
                 episode_steps += 1
             if dataset[i][-1] or i == len(dataset) - 1:
                 js.append(j)
-                utility=0
+                utility = 0
                 for uti in x[0][1]:
-                    utility+=uti
-                fair=AreaInfo.areaCapStdTool(x[0][1],x[0][2])
+                    utility += uti
+                fair = AreaInfo.areaCapStdTool(x[0][1], x[0][2])
                 utilityList.append(utility)
                 fairList.append(fair)
                 rewardList.append(x)
@@ -354,7 +361,7 @@ def compute_J(dataset, gamma=1.):
             else:
                 episode_steps += 1
             if dataset[i][-1] or i == len(dataset) - 1:
-                j=AreaInfo.caculRewardTotal(d)
+                j = AreaInfo.caculRewardTotal(d)
                 js.append(j)
                 utility = 0
                 for uti in x[0][1]:
@@ -367,9 +374,9 @@ def compute_J(dataset, gamma=1.):
 
     if len(js) == 0:
         return [0.]
-    utility=utilityList[0]
-    fair=fairList[0]
-    return js,utility,fair,rewardList
+    utility = utilityList[0]
+    fair = fairList[0]
+    return js, utility, fair, rewardList
 
 
 def experiment(mdp, params, prob=None):
@@ -388,7 +395,7 @@ def experiment(mdp, params, prob=None):
         optimizer['class'] = optim.Adadelta
         optimizer['params'] = dict(lr=params['learning_rate'])
     elif params['optimizer'] == 'rmsprop':
-        #默认值
+        # 默认值
         optimizer['class'] = optim.RMSprop
         optimizer['params'] = dict(lr=params['learning_rate'],
                                    alpha=params['decay'])
@@ -415,7 +422,7 @@ def experiment(mdp, params, prob=None):
     epsilon = ExponentialParameter(value=params['initial_exploration_rate'],
                                    exp=params['exploration_rate'],
                                    min_value=params['final_exploration_rate'],
-                                  size=(1,))
+                                   size=(1,))
     '''
     参数根据使用的次数变化
     'exploration_rate': .1,
@@ -425,7 +432,8 @@ def experiment(mdp, params, prob=None):
     epsilon_random = Parameter(value=1)
     epsilon_test = Parameter(value=0.01)
     pi = EpsGreedy(epsilon=epsilon_random)
-    #ϵ ( < 1 ) 的概率随机选择未知的一个动作，剩下1 − ϵ 的概率选择已有动过中动作价值最大的动作
+
+    # ϵ ( < 1 ) 的概率随机选择未知的一个动作，剩下1 − ϵ 的概率选择已有动过中动作价值最大的动作
 
     class CategoricalLoss(nn.Module):
         def forward(self, input, target):
@@ -435,18 +443,6 @@ def experiment(mdp, params, prob=None):
 
     # Approximator
     input_shape = mdp.observation.shape
-    '''
-    self.shape = (len(env.devices), 4 + 1 + 1 + 1 + 1 + 1 + (7 if self.use_weekdays else 0))
-    '''
-    resources = [[(mdp.north - mdp.devices[device][0]) / (mdp.north - mdp.south),
-                  (mdp.east - mdp.devices[device][1]) / (mdp.east - mdp.west)]
-                 for device in mdp.device_ordering]
-    edges = [[(mdp.north - mdp.graph.nodes[e[0]]['y']) / (mdp.north - mdp.south),
-              (mdp.east - mdp.graph.nodes[e[0]]['x']) / (mdp.east - mdp.west),
-              (mdp.north - mdp.graph.nodes[e[1]]['y']) / (mdp.north - mdp.south),
-              (mdp.east - mdp.graph.nodes[e[1]]['x']) / (mdp.east - mdp.west)
-              ]
-             for e in mdp.graph.edges]
 
     N = {
         'SimpleResourceNetwork': SimpleResourceNetwork,
@@ -458,19 +454,14 @@ def experiment(mdp, params, prob=None):
     approximator_params = dict(
         network=N,
         input_shape=input_shape,
-        edges=edges,
-        resources=resources,
         graph=mdp.graph,
         allow_wait=params['allow_wait'],
         long_term_q=params['long_term_q'],
         resource_embeddings=params['resource_embeddings'],
-        edge_ordering=mdp.edge_ordering,
-        device_ordering=mdp.device_ordering,
-        resource_edges=mdp.resource_edges,
         output_shape=(mdp.info.action_space.n,),
         n_actions=mdp.info.action_space.n,
         n_features=params['hidden'],
-        #256
+        # 256
         optimizer=optimizer,
         loss=F.smooth_l1_loss,
         nn_scaling=params['nn_scaling'],
@@ -490,7 +481,7 @@ def experiment(mdp, params, prob=None):
     # Agent
     algorithm_params = dict(
         batch_size=params['batch_size'],
-        #128
+        # 128
         n_approximators=1,
         target_update_frequency=params['target_update_frequency'] // params['train_frequency'],
         replay_memory=replay_memory,
@@ -498,9 +489,8 @@ def experiment(mdp, params, prob=None):
         max_replay_size=params['max_replay_size']
     )
 
-
     clz = DoubleDQN if mdp.info.gamma >= 1 else SMDPDQN
-    print("gamma: "+str(mdp.info.gamma))
+    print("gamma: " + str(mdp.info.gamma))
     # clz=DoubleDQN
     agent = clz(mdp.info, pi, approximator,
                 approximator_params=approximator_params,
@@ -509,9 +499,9 @@ def experiment(mdp, params, prob=None):
     lr_scheduler = torch.optim.lr_scheduler.StepLR(agent.approximator._impl.model._optimizer,
                                                    step_size=1,
                                                    gamma=params['lr_decay'],
-                                                   last_epoch=-1) # params['max_steps'] // params['train_frequency']
+                                                   last_epoch=-1)  # params['max_steps'] // params['train_frequency']
     # Algorithm
-    core = Core(agent, mdp)
+    core = MyCore(agent, mdp)
 
     if 'weights' in params:
         best_weights = np.load(params['weights'])
@@ -523,14 +513,14 @@ def experiment(mdp, params, prob=None):
     # RUN
     pi.set_epsilon(epsilon_test)
     eval_days = [i for i in range(1, 356) if i % 13 == 1]
-    eval_days=[39]
+    eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, quiet=tuning, render=params['save'])
 
     # print("dataset:")
     # print(ds)
 
-    test_result,utility,fair,rewardList = compute_J(ds)
-    test_result_discounted,utility,fair,rewardList = compute_J(ds, params['gamma'])
+    test_result, utility, fair, rewardList = compute_J(ds)
+    test_result_discounted, utility, fair, rewardList = compute_J(ds, params['gamma'])
     test_result = test_result[0]
     test_result_discounted = test_result_discounted[0]
 
@@ -538,7 +528,7 @@ def experiment(mdp, params, prob=None):
     print("validation result", test_result)
     results = [(0, 0, test_result_discounted, test_result)]
     # if params['save']:
-        # mdp.save_rendered(folder_name + "/epoch_init.mp4")
+    # mdp.save_rendered(folder_name + "/epoch_init.mp4")
 
     # Fill replay memory with random dataset
     print_epoch(0)
@@ -586,8 +576,8 @@ def experiment(mdp, params, prob=None):
         ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
         print("dataset")
         print(ds)
-        test_result_discounted ,utility,fair,rewardList= compute_J(ds, params['gamma'])
-        test_result,utility,fair,rewardList = compute_J(ds)
+        test_result_discounted, utility, fair, rewardList = compute_J(ds, params['gamma'])
+        test_result, utility, fair, rewardList = compute_J(ds)
         test_result = test_result[0]
         test_result_discounted = test_result_discounted[0]
         print("discounted validation result", test_result_discounted)
@@ -596,12 +586,10 @@ def experiment(mdp, params, prob=None):
         # if params['save']:
         #     mdp.save_rendered(folder_name + ("/epoch%04d.mp4" % n_epoch))
 
-
         if params['save']:
-
-            resFile = [runtime, steps, test_result_discounted, test_result,utility,fair, rewardList]
+            resFile = [runtime, steps, test_result_discounted, test_result, utility, fair, rewardList]
             resFileDf = pd.DataFrame([resFile], columns=["runtime", "steps", "test_result_discounted",
-                                                         "test_result", "utility","fair","rewardList"])
+                                                         "test_result", "utility", "fair", "rewardList"])
             resFileDf.to_csv(folder_name + '/scores.csv', mode='a', index=False, header=None)
 
         if test_result > best_score:
@@ -620,8 +608,7 @@ def experiment(mdp, params, prob=None):
     agent.approximator.set_weights(best_weights)
     agent.target_approximator.set_weights(best_weights)
     pi.set_epsilon(epsilon_test)
-    eval_days = [i for i in range(1, 356) if i % 13 == 0]
-    eval_days=[39]
+    eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
     test_result_discounted, rewardList = compute_J(ds, params['gamma'])
     test_result, rewardList = compute_J(ds)
@@ -682,10 +669,9 @@ def train_top(external_params=None):
 
     if external_params is not None:
         params.update(external_params)
-    params['train_frequency'] = np.ceil(params['batch_size'] // params['average_updates'])#np.ceil大于等于的最小整数.
+    params['train_frequency'] = np.ceil(params['batch_size'] // params['average_updates'])  # np.ceil大于等于的最小整数.
     if 'gamma_half_time' in params:
-        params['gamma'] = np.power(0.5, 1./params['gamma_half_time'])
-
+        params['gamma'] = np.power(0.5, 1. / params['gamma_half_time'])
 
     if 'network_int' in params:
         params['network'] = ['GraphConvolutionResourceNetwork', 'AttentionResourceNetwork'][params['network_int']]
@@ -699,25 +685,9 @@ def train_top(external_params=None):
     random.seed(params['seed'])
     torch.manual_seed(params['seed'])
 
-    speed = 5/3.6
-
-    gamma = 1#np.power(0.2, 1./600.)
-    if params['afterstates']:
-        observation = ResourceObservation2(speed, use_weekdays=params['use_weekdays'])
-    else:
-        observation = ResourceObservation(use_weekdays=params['use_weekdays'])
-    db_file = os.path.join(PROJECT_DIR, "dataset.db")#载入数据库文件
-    mdp =TopEnvironment(db_file, params['area'], observation,
-                                             gamma=params['gamma'],
-                                             speed=speed,
-                                             start_hour=params['start_hour'],
-                                             end_hour=params['end_hour'],
-                                             add_time=params['gamma'] < 1,
-                                             allow_wait=params['allow_wait'],
-                                             train_days=[i for i in range(1,356) if (i % 13) not in [0, 1]],
-                                             project_dir=PROJECT_DIR)
+    observation = ResourceObservation(use_weekdays=params['use_weekdays'])
+    mdp = TopEnvironment(params['gamma'], 50, 50, observation, 0, 1)
     observation.init(mdp)
-
     experiment(mdp, params, prob=None)
 
     mdp.close()
@@ -766,7 +736,7 @@ if __name__ == '__main__':
 
     train_top({
         'seed': 352625,
-        'area': ['Docklands','Southbank','Queensberry'],
+        'area': ['Docklands', 'Southbank', 'Queensberry'],
         # 'area': 'Princes Theatre',
         'network': 'GraphConvolutionResourceNetwork',
         # 'network': 'Network',

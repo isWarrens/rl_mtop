@@ -32,18 +32,18 @@ class TopEnvironment(Environment):
     FREE = 0
     OCCUPIED = 1
 
-    def __init__(self, train_days, gamma, requests, time, actions, drivers_num, speed=50., observation=None, start_time = None, timestep = 1):
+    def __init__(self, gamma, drivers_num=0, speed=50., observation=None, start_time=None, timestep=1):
 
         self.train_days = [39]
-        self.drivers = Driver[drivers_num]
-
+        self.drivers = []
+        for i in range(drivers_num):
+            self.drivers.append(Driver(0))
         # 初始化司机
         for idx, driver in enumerate(self.drivers):
             driver.on_road = 0
             driver.idx = idx
             driver.money = 0
             driver.speed = speed
-
 
         self.observation = observation
         self.events = None
@@ -98,7 +98,8 @@ class TopEnvironment(Environment):
                 del select_actions[select_actions.index(random_action)]
         r = 0
         for driver, request in action_map.items():
-            r += self.graph.get_edge_data(request.origin,request.destination) - self.graph.get_edge_data(driver.pos,request.destination)
+            r += self.graph.get_edge_data(request.origin, request.destination) - self.graph.get_edge_data(driver.pos,
+                                                                                                          request.destination)
             driver.on_road = 1
             driver.Request = request
         return self._state(), r, self.done, {}
