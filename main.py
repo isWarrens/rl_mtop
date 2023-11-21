@@ -185,16 +185,19 @@ class GraphConvolutionResourceNetwork(nn.Module):
 
     def init(self, env):
         self.shape = (len(env.graph.drivers), 4)
+        self.actions_num = len(env.graph.nodes)
 
     def __init__(self, input_shape, output_shape,
-                 graph=None, long_term_q=False, resource_embeddings=0, nn_scaling=False, nodes_num=0,
-                 load_path=None, **kwargs):
+                 graph=None, resource_embeddings=0, nn_scaling=False, nodes_num=0,
+                 **kwargs):
         super().__init__()
 
         self.shape = None
         n_output = output_shape[-1]
         self.nn_scaling = nn_scaling
         self.actions_num = nodes_num
+        print(self.actions_num)
+
 
         distances = torch.zeros(graph.number_of_nodes() + 3, graph.number_of_nodes() + 3)
         distances = distances / distances.max()
@@ -215,10 +218,10 @@ class GraphConvolutionResourceNetwork(nn.Module):
             self.scaling = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
             self.scaling.data.uniform_()
 
-        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(self.actions_num, resource_embeddings),
+        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(50, resource_embeddings),
                                                       requires_grad=True)
+        print(self.actions_num)
         self.resource_embeddings.data.uniform_()
-
         self.init_encoding = torch.nn.Sequential(
             torch.nn.Linear(input_shape[-1] + resource_embeddings, self.n_features),
             torch.nn.ReLU(),
@@ -460,6 +463,7 @@ def experiment(mdp, params, prob=None):
         resource_embeddings=params['resource_embeddings'],
         output_shape=(mdp.info.action_space.n,),
         n_actions=mdp.info.action_space.n,
+        nodes_num=mdp.info.action_space.n,
         n_features=params['hidden'],
         # 256
         optimizer=optimizer,
