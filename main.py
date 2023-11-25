@@ -61,6 +61,7 @@ class ResourceObservation:
     """
     This class parses the state to to an observation processable for the neural network.
     """
+
     def init(self, env):
         self.shape = (len(env.drivers), 4)
 
@@ -198,20 +199,25 @@ class GraphConvolutionResourceNetwork(nn.Module):
         self.actions_num = nodes_num
         print(self.actions_num)
 
-
         distances = torch.zeros(graph.number_of_nodes() + 3, graph.number_of_nodes() + 3)
         distances = distances / distances.max()
         self.register_buffer("distances", distances)
+        for node1 in graph.nodes:
+            for node2 in graph.nodes:
+                if nx.shortest_path_length(graph, node1, node2) == np.nan:
+                    print("valid" + node1, node2)
+                self.distances[node1][node2] = nx.shortest_path_length(graph, node1, node2)
+        has_nan = torch.isnan(self.distances).any()
+        if has_nan:
+            print("dis contains NaN values")
+        else:
+            print("dis does not contain NaN values")
 
-        for node1 in graph.nodes():
-            for node2 in graph.nodes():
-                distances[change_node_to_int(node1)][change_node_to_int(node2)] = nx.shortest_path_length(graph, node1,
-                                                                                                          node2)
         if nn_scaling:
             self.scaling = torch.nn.Sequential(
                 torch.nn.Linear(1, self.n_scaling_features),
                 torch.nn.Sigmoid(),
-                torch.nn.Linear(self.n_scaling_features, 1),
+                torch.nn.Linear(self.n_scaling_features, 50),
                 torch.nn.Sigmoid()
             )
         else:
@@ -220,7 +226,6 @@ class GraphConvolutionResourceNetwork(nn.Module):
 
         self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(50, resource_embeddings),
                                                       requires_grad=True)
-        print(self.actions_num)
         self.resource_embeddings.data.uniform_()
         self.init_encoding = torch.nn.Sequential(
             torch.nn.Linear(input_shape[-1] + resource_embeddings, self.n_features),
@@ -241,21 +246,19 @@ class GraphConvolutionResourceNetwork(nn.Module):
         res_enc = self.init_encoding(res_enc)
 
         if self.nn_scaling:
-            A = self.scaling(self.distances.unsqueeze(-1)).squeeze(-1)
+            A = self.scaling(self.distances.unsqueeze(-1))
+            has_nan = torch.isnan(A).any()
+            if has_nan:
+                print("A contains NaN values")
+            else:
+                print("A does not contain NaN values")
         else:
             A = torch.exp(-self.scaling * self.distances)
-        A = A / A.sum(1).unsqueeze(1)
+        A = A.mean(dim=1)
         # A = A / A.sum(1).max()
         x = torch.matmul(A, res_enc)
 
         q = self.model(x).squeeze(-1)
-
-        if self.allow_wait:
-            wait_q = self.wait_model(x.view(x.shape[0], -1))
-            q = torch.cat([q, wait_q], dim=-1)
-
-        if self.use_long_term_q:
-            q = q + self.long_term_q(res_enc).mean(1)
 
         if action is None:
             return q
@@ -437,12 +440,6 @@ def experiment(mdp, params, prob=None):
     pi = EpsGreedy(epsilon=epsilon_random)
 
     # ϵ ( < 1 ) 的概率随机选择未知的一个动作，剩下1 − ϵ 的概率选择已有动过中动作价值最大的动作
-
-    class CategoricalLoss(nn.Module):
-        def forward(self, input, target):
-            input = input.clamp(1e-5)
-
-            return -torch.sum(target * torch.log(input))
 
     # Approximator
     input_shape = mdp.observation.shape
@@ -773,6 +770,6 @@ if __name__ == '__main__':
         'afterstates': True,
         'use_weekdays': False,
         'save': True,
-        'cuda': torch.cuda.is_available(),
+        'cuda': False,
         'name': time_str
     })

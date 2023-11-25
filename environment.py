@@ -57,8 +57,8 @@ class TopEnvironment(Environment):
         # 导入所有请求
         self.requests = import_requests_from_csv()
         # 所有的点
-        self.actions = self.graph.nodes
-        mdp_info = MDPInfo(Discrete(2), Discrete(len(self.actions)), gamma, np.inf)
+        self.actions = tuple(self.graph.nodes)
+        mdp_info = MDPInfo(Discrete(1), Discrete(len(self.actions)), gamma, np.inf)
         super().__init__(mdp_info)
 
     def close(self):
@@ -81,7 +81,8 @@ class TopEnvironment(Environment):
     # action是request[] action是一一对应的
     def step(self, action):
         # action把他变成司机->request的形式传入step
-        node_idx = action.item()
+        print(action)
+        node_idx = action[0]
         select_actions = []
         for r in range(self.requests):
             if r.destination == node_idx:
