@@ -103,8 +103,9 @@ def change_csv():
         temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
 
         writer = csv.writer(temp_file)
-
-        # 跳过第一行
+        # 读取并写入第一行
+        header = next(reader)
+        writer.writerow(header)        # 跳过第一行
         next(reader)
         for row in reader:
             nodes = row[1].split('_')
@@ -116,7 +117,7 @@ def change_csv():
             except ValueError:
                 continue
 
-            if (int(node1.replace("A", "")) > 100 | int(node2.replace("A", "")) > 100):
+            if int(node1.replace("A", "")) > 100 | int(node2.replace("A", "")) > 100:
                 continue
 
             writer.writerow(row)
