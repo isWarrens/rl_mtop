@@ -45,8 +45,6 @@ class MyCore(Core):
 
         self._episode_steps += 1
 
-        if render:
-            self.mdp.render()
 
         last = not (
                 self._episode_steps < self.mdp.info.horizon and not absorbing)
@@ -199,7 +197,7 @@ class GraphConvolutionResourceNetwork(nn.Module):
         self.actions_num = nodes_num
         print(self.actions_num)
 
-        distances = torch.zeros(graph.number_of_nodes() + 3, graph.number_of_nodes() + 3)
+        distances = torch.zeros(graph.number_of_nodes(), graph.number_of_nodes())
         distances = distances / distances.max()
         self.register_buffer("distances", distances)
         for node1 in graph.nodes:
@@ -247,11 +245,7 @@ class GraphConvolutionResourceNetwork(nn.Module):
 
         if self.nn_scaling:
             A = self.scaling(self.distances.unsqueeze(-1))
-            has_nan = torch.isnan(A).any()
-            if has_nan:
-                print("A contains NaN values")
-            else:
-                print("A does not contain NaN values")
+            has_nan = torch.isnan(A).any
         else:
             A = torch.exp(-self.scaling * self.distances)
         A = A.mean(dim=1)

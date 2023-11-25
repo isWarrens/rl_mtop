@@ -55,7 +55,9 @@ class TopEnvironment(Environment):
         # 创建地图
         self.graph = create_graph()
         # 导入所有请求
-        self.requests = import_requests_from_csv()
+        self.all_requests = import_requests_from_csv()
+        # 当前时间下的所有请求
+        self.requests = []
         # 所有的点
         self.actions = tuple(self.graph.nodes)
         mdp_info = MDPInfo(Discrete(1), Discrete(len(self.actions)), gamma, np.inf)
@@ -73,6 +75,7 @@ class TopEnvironment(Environment):
             driver.pos = choose_random_node(self.graph)
 
         self.time = 0
+        self.requests.extend(self.all_requests[0])
         return self._state()
 
     def _state(self):
@@ -81,10 +84,9 @@ class TopEnvironment(Environment):
     # action是request[] action是一一对应的
     def step(self, action):
         # action把他变成司机->request的形式传入step
-        print(action)
         node_idx = action[0]
         select_actions = []
-        for r in range(self.requests):
+        for r in self.requests:
             if r.destination == node_idx:
                 select_actions.append(r)
 
@@ -97,10 +99,10 @@ class TopEnvironment(Environment):
                 action_map[driver] = random_action
                 driver.on_road = 1
                 del select_actions[select_actions.index(random_action)]
-        r = 0
+        r = []
         for driver, request in action_map.items():
-            r += self.graph.get_edge_data(request.origin, request.destination) - self.graph.get_edge_data(driver.pos,
-                                                                                                          request.destination)
+            r.append(self.graph.get_edge_data(request.origin, request.destination) - self.graph.get_edge_data(driver.pos,
+                                                                                                          request.destination))
             driver.on_road = 1
             driver.Request = request
         return self._state(), r, self.done, {}

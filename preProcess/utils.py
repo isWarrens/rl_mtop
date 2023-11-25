@@ -9,7 +9,6 @@ import shutil
 
 
 def create_graph():
-    change_csv()
     project_dir = os.path.dirname(os.getcwd())
     data_dir = project_dir + '/rl_mtop/data'
     # 读取CSV文件
@@ -94,7 +93,7 @@ def change_node_to_int(node):
 
 def change_csv():
     project_dir = os.path.dirname(os.getcwd())
-    data_dir = project_dir + '/rl_mtop/data'+ '/dis_CBD_twoPs_03_19.csv'
+    data_dir = project_dir + '/rl_mtop/data'+ '/bay_vio_data_03_19.csv'
 
     # 读取原始CSV文件的数据并筛选
     with open(data_dir, 'r', newline='') as input_file:
