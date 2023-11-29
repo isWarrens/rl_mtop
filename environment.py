@@ -105,7 +105,7 @@ class TopEnvironment(Environment):
                                                                                                           request.destination))
             driver.on_road = 1
             driver.Request = request
-        return self._state(), r, self.done, {}
+        return self._state(), r, True, {}
 
 
 '''

@@ -45,7 +45,6 @@ class MyCore(Core):
 
         self._episode_steps += 1
 
-
         last = not (
                 self._episode_steps < self.mdp.info.horizon and not absorbing)
 
@@ -93,7 +92,7 @@ class ResourceObservation:
 
 class ResourceObservation2:
     """
-    This class parses the state to to an observation processable for the neural network.
+    This class parses the state  to an observation processable for the neural network.
     This implementation computes the time of arrival at each resource and checks if the resource will be in violation
     at arrival time.
     """
@@ -245,7 +244,6 @@ class GraphConvolutionResourceNetwork(nn.Module):
 
         if self.nn_scaling:
             A = self.scaling(self.distances.unsqueeze(-1))
-            has_nan = torch.isnan(A).any
         else:
             A = torch.exp(-self.scaling * self.distances)
         A = A.mean(dim=1)
@@ -309,73 +307,7 @@ def print_epoch(epoch):
 
 
 def compute_J(dataset, gamma=1.):
-    """
-    Compute the cumulative discounted reward of each episode in the dataset.
-
-    Args:
-        dataset (list): the dataset to consider;
-        gamma (float, 1.): discount factor.
-
-    Returns:
-        The cumulative discounted reward of each episode in the dataset.
-
-    """
-    js = list()
-    rewardList = list()
-    utilityList = list()
-    fairList = list()
-    j = 0.
-    episode_steps = 0
-    if gamma != 1:
-        for i in range(len(dataset)):
-            x = dataset[i][2]
-            d = x[0] if not np.isscalar(x) else x
-            reward = d[3]
-            # reward+=AreaInfo.caculRewardStep(d)
-
-            j += gamma ** episode_steps * reward
-
-            if not np.isscalar(x):
-                episode_steps += x[1]
-            else:
-                episode_steps += 1
-            if dataset[i][-1] or i == len(dataset) - 1:
-                js.append(j)
-                utility = 0
-                for uti in x[0][1]:
-                    utility += uti
-                fair = AreaInfo.areaCapStdTool(x[0][1], x[0][2])
-                utilityList.append(utility)
-                fairList.append(fair)
-                rewardList.append(x)
-                j = 0.
-                episode_steps = 0
-    else:
-        for i in range(len(dataset)):
-            x = dataset[i][2]
-            d = x[0] if not np.isscalar(x) else x
-            reward = d[3]
-            # reward+=AreaInfo.caculRewardStep(d)
-            if not np.isscalar(x):
-                episode_steps += x[1]
-            else:
-                episode_steps += 1
-            if dataset[i][-1] or i == len(dataset) - 1:
-                j = AreaInfo.caculRewardTotal(d)
-                js.append(j)
-                utility = 0
-                for uti in x[0][1]:
-                    utility += uti
-                fair = AreaInfo.areaCapStdTool(x[0][1], x[0][2])
-                utilityList.append(utility)
-                fairList.append(fair)
-                rewardList.append(x)
-                episode_steps = 0
-
-    if len(js) == 0:
-        return [0.]
-    utility = utilityList[0]
-    fair = fairList[0]
+    for
     return js, utility, fair, rewardList
 
 
@@ -507,9 +439,8 @@ def experiment(mdp, params, prob=None):
 
     # RUN
     pi.set_epsilon(epsilon_test)
-    eval_days = [i for i in range(1, 356) if i % 13 == 1]
     eval_days = [39]
-    ds = core.evaluate(initial_states=eval_days, quiet=tuning, render=params['save'])
+    ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
 
     # print("dataset:")
     # print(ds)
@@ -568,7 +499,7 @@ def experiment(mdp, params, prob=None):
         print('- Evaluation:')
         # evaluation step
         pi.set_epsilon(epsilon_test)
-        ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
+        ds = core.evaluate()
         print("dataset")
         print(ds)
         test_result_discounted, utility, fair, rewardList = compute_J(ds, params['gamma'])
