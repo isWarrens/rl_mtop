@@ -94,18 +94,21 @@ class TopEnvironment(Environment):
         sorted_drivers = sorted(self.drivers, key=lambda d: d.money)
 
         for driver in sorted_drivers:
-            if driver.on_road == 0 & len(select_actions) != 0:
+            if (driver.on_road == 0) & (len(select_actions) != 0):
                 random_action = random.choice(select_actions)
                 action_map[driver] = random_action
                 driver.on_road = 1
                 del select_actions[select_actions.index(random_action)]
         r = []
         for driver, request in action_map.items():
-            r.append(self.graph.get_edge_data(request.origin, request.destination) - self.graph.get_edge_data(driver.pos,
-                                                                                                          request.destination))
+            r.append(self.graph.get_edge_data(request.origin, request.destination)["distance"] - self.graph.get_edge_data(driver.pos,
+                                                                                                          request.destination)["distance"])
             driver.on_road = 1
             driver.Request = request
-        return self._state(), r, True, {}
+        self.time += 1
+        if self.time >= 50:
+            self.done = True
+        return self._state(), r, self.done, {}
 
 
 '''

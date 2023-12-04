@@ -35,7 +35,7 @@ class MyCore(Core):
             if driver.on_road == 1:
                 driver.start_time += self.mdp.timestep
                 if self.mdp.graph.get_edge_data(driver.Request.origin,
-                                                driver.Request.destination) / driver.speed <= driver.start_time:
+                                                driver.Request.destination)["distance"] / driver.speed <= driver.start_time:
                     driver.on_road = 0
                     driver.pos = driver.Request.destination
 
@@ -307,8 +307,18 @@ def print_epoch(epoch):
 
 
 def compute_J(dataset, gamma=1.):
-    for
-    return js, utility, fair, rewardList
+    rewardList = list()
+    utilityList = list()
+    ulity = 0
+    for i in range(len(dataset)):
+        x = dataset[i][2]
+        if len(x) != 0:
+            rewardList.append(x)
+            for j in range(len(x)):
+                ulity += x[j]
+
+    utilityList.append(ulity)
+    return rewardList, utilityList
 
 
 def experiment(mdp, params, prob=None):
@@ -441,20 +451,12 @@ def experiment(mdp, params, prob=None):
     pi.set_epsilon(epsilon_test)
     eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
-
     # print("dataset:")
     # print(ds)
 
-    test_result, utility, fair, rewardList = compute_J(ds)
-    test_result_discounted, utility, fair, rewardList = compute_J(ds, params['gamma'])
-    test_result = test_result[0]
-    test_result_discounted = test_result_discounted[0]
-
-    print("discounted validation result", test_result_discounted)
-    print("validation result", test_result)
-    results = [(0, 0, test_result_discounted, test_result)]
-    # if params['save']:
-    # mdp.save_rendered(folder_name + "/epoch_init.mp4")
+    rewardList, ulityList = compute_J(ds)
+    print(rewardList)
+    print(ulityList)
 
     # Fill replay memory with random dataset
     print_epoch(0)
@@ -536,12 +538,7 @@ def experiment(mdp, params, prob=None):
     pi.set_epsilon(epsilon_test)
     eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
-    test_result_discounted, rewardList = compute_J(ds, params['gamma'])
-    test_result, rewardList = compute_J(ds)
-    test_result = test_result[0]
-    test_result_discounted = test_result_discounted[0]
-    print("discounted test result", test_result_discounted)
-    print("test result", test_result)
+    rewardList, ulity = compute_J(ds, params['gamma'])
 
     with open(folder_name + "/test_result.txt", "w") as f:
         f.write("%f" % test_result)

@@ -59,7 +59,7 @@ class Request:
 class Driver:
     def __init__(self, speed):
         self.on_road = None
-        self.start_time = None
+        self.start_time = 0
         self.Request = None
         self.idx = None
         self.money = None
@@ -76,8 +76,8 @@ def import_requests_from_csv():
     data = pd.read_csv(file_path)
     for row in data.itertuples(index=False):
         timestamp = row.RequestTime
-        destination = row.aim_marker
-        origin = row.street_marker
+        destination = change_node_to_int(row.aim_marker)
+        origin = change_node_to_int(row.street_marker)
         if timestamp >= len(requests):
             requests.append([])
         request = Request(timestamp, destination, origin)
