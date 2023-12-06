@@ -501,32 +501,13 @@ def experiment(mdp, params, prob=None):
         print('- Evaluation:')
         # evaluation step
         pi.set_epsilon(epsilon_test)
-        ds = core.evaluate()
-        print("dataset")
-        print(ds)
-        test_result_discounted, utility, fair, rewardList = compute_J(ds, params['gamma'])
-        test_result, utility, fair, rewardList = compute_J(ds)
-        test_result = test_result[0]
-        test_result_discounted = test_result_discounted[0]
-        print("discounted validation result", test_result_discounted)
-        print("validation result", test_result)
+        ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
+        rewardList, ulityList = compute_J(ds)
+        print(ulityList)
 
         # if params['save']:
         #     mdp.save_rendered(folder_name + ("/epoch%04d.mp4" % n_epoch))
 
-        if params['save']:
-            resFile = [runtime, steps, test_result_discounted, test_result, utility, fair, rewardList]
-            resFileDf = pd.DataFrame([resFile], columns=["runtime", "steps", "test_result_discounted",
-                                                         "test_result", "utility", "fair", "rewardList"])
-            resFileDf.to_csv(folder_name + '/scores.csv', mode='a', index=False, header=None)
-
-        if test_result > best_score:
-            no_improvement = 0
-            best_score = test_result
-            best_weights = agent.approximator.get_weights().copy()
-
-            with open(folder_name + "/best_val.txt", "w") as f:
-                f.write("%f" % test_result)
         # else:
         #     no_improvement += 1
         #     if no_improvement >= patience:
@@ -539,12 +520,8 @@ def experiment(mdp, params, prob=None):
     eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
     rewardList, ulity = compute_J(ds, params['gamma'])
-
-    with open(folder_name + "/test_result.txt", "w") as f:
-        f.write("%f" % test_result)
-
-    if params['save']:
-        mdp.save_rendered(folder_name + "/epoch_test.mp4", 10000)
+    print(ulity)
+    print(rewardList)
 
     return scores
 
@@ -680,7 +657,7 @@ if __name__ == '__main__':
         'target_update_frequency': 50000,
         'evaluation_frequency': 100,
         'average_updates': 8,
-        'max_steps': 1000000,
+        'max_steps': 100000,
         'initial_exploration_rate': 1.,
         'exploration_rate': .1,
         'final_exploration_rate': .01,

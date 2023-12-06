@@ -32,7 +32,7 @@ class TopEnvironment(Environment):
     FREE = 0
     OCCUPIED = 1
 
-    def __init__(self, gamma, drivers_num=0, speed=50., observation=None, start_time=None, timestep=1):
+    def __init__(self, gamma, drivers_num=0, speed=5000., observation=None, start_time=None, timestep=1):
 
         self.train_days = [39]
         self.drivers = []
@@ -76,6 +76,7 @@ class TopEnvironment(Environment):
 
         self.time = 0
         self.requests.extend(self.all_requests[0])
+        self.done = False
         return self._state()
 
     def _state(self):
@@ -106,7 +107,7 @@ class TopEnvironment(Environment):
             driver.on_road = 1
             driver.Request = request
         self.time += 1
-        if self.time >= 50:
+        if self.time >= 500:
             self.done = True
         return self._state(), r, self.done, {}
 

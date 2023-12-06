@@ -31,8 +31,21 @@ class SMDPDQN(DoubleDQN):
                 self._replay_memory.get(self._batch_size)
 
             q_next = self._next_q(next_state, absorbing)
-
-            q = rt + self.mdp_info.gamma * q_next
+            reward = []
+            for i in range(len(rt)):
+                r = 0
+                if len(rt[i]) == 0:
+                    reward.append(r)
+                else:
+                    for j in range(len(rt[i])):
+                        r += rt[i][j]
+                    reward.append(r)
+            print("rt")
+            print(reward)
+            print("q_next")
+            print(q_next)
+            print(self.mdp_info.gamma * q_next)
+            q = reward + self.mdp_info.gamma * q_next
             td_error = q - self.approximator.predict(state, action)
 
             self._replay_memory.update(td_error, idxs)
