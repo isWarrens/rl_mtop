@@ -318,9 +318,13 @@ def compute_J(dataset, gamma=1.):
                 ulity += x[j]
 
     utilityList.append(ulity)
-    return rewardList, utilityList
-
-
+    state = dataset[len(dataset) - 1]
+    arr = []
+    for p in range(len(state[0])):
+        arr.append(state[0][p][3])
+    arr = np.array(arr)
+    fairness = np.std(arr)
+    return rewardList, utilityList, fairness
 def experiment(mdp, params, prob=None):
     # Argument parser
     # parser = argparse.ArgumentParser()
@@ -455,9 +459,10 @@ def experiment(mdp, params, prob=None):
     # print("dataset:")
     # print(ds)
 
-    rewardList, ulityList = compute_J(ds)
+    rewardList, ulity, fairness = compute_J(ds, params['gamma'])
+    print(ulity)
     print(rewardList)
-    print(ulityList)
+    print(fairness)
 
     # Fill replay memory with random dataset
     print_epoch(0)
@@ -499,8 +504,10 @@ def experiment(mdp, params, prob=None):
         # evaluation step
         pi.set_epsilon(epsilon_test)
         ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
-        rewardList, ulityList = compute_J(ds)
-        print(ulityList)
+        rewardList, ulity, fairness = compute_J(ds, params['gamma'])
+        print(ulity)
+        print(rewardList)
+        print(fairness)
 
         # if params['save']:
         #     mdp.save_rendered(folder_name + ("/epoch%04d.mp4" % n_epoch))
@@ -516,9 +523,11 @@ def experiment(mdp, params, prob=None):
     pi.set_epsilon(epsilon_test)
     eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
-    rewardList, ulity = compute_J(ds, params['gamma'])
+    rewardList, ulity,fairness = compute_J(ds, params['gamma'])
+    print("---ulity------")
     print(ulity)
-    print(rewardList)
+    print("----fairness---")
+    print(fairness)
 
     return scores
 
