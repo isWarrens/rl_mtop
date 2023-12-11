@@ -1,6 +1,8 @@
 import random
 import sqlite3
 import os
+import sys
+
 import pandas as pd
 import osmnx as ox
 import networkx as nx
@@ -32,7 +34,7 @@ class TopEnvironment(Environment):
     FREE = 0
     OCCUPIED = 1
 
-    def __init__(self, gamma, drivers_num=0, speed=5000., observation=None, start_time=None, timestep=1):
+    def __init__(self, gamma, drivers_num=0, speed=5000., observation=None, start_time=None, timestep=1, final_time=50, fairness_discount=0.9):
 
         self.train_days = [39]
         self.drivers = []
@@ -52,6 +54,8 @@ class TopEnvironment(Environment):
         self.done = False
         self.start_time = start_time
         self.timestep = timestep
+        self.final_time = final_time
+        self.fairness_discount = fairness_discount
         # 创建地图
         self.graph = create_graph()
         # 导入所有请求
@@ -74,7 +78,11 @@ class TopEnvironment(Environment):
             driver.Request = None
             driver.pos = choose_random_node(self.graph)
 
+        for requests in self.all_requests:
+            for r in requests:
+                r.state = 0
         self.time = 0
+        self.requests = []
         self.requests.extend(self.all_requests[0])
         self.done = False
         return self._state()
@@ -85,29 +93,31 @@ class TopEnvironment(Environment):
     # action是request[] action是一一对应的
     def step(self, action):
         # action把他变成司机->request的形式传入step
-        node_idx = action[0]
-        select_actions = []
-        for r in self.requests:
-            if r.destination == node_idx:
-                select_actions.append(r)
-
         action_map = {}
         sorted_drivers = sorted(self.drivers, key=lambda d: d.money)
 
         for driver in sorted_drivers:
-            if (driver.on_road == 0) & (len(select_actions) != 0):
+            if driver.on_road == 0:
+                node_idx = action[driver.idx]
+                select_actions = []
+                for r in self.requests:
+                    if (r.destination == node_idx) & (r.state == 0):
+                        select_actions.append(r)
+                if len(select_actions) == 0:
+                    continue
                 random_action = random.choice(select_actions)
+                random_action.state = 1
                 action_map[driver] = random_action
                 driver.on_road = 1
                 del select_actions[select_actions.index(random_action)]
         r = []
         for driver, request in action_map.items():
             r.append(self.graph.get_edge_data(request.origin, request.destination)["distance"] - self.graph.get_edge_data(driver.pos,
-                                                                                                          request.destination)["distance"])
+                                                                                      request.origin)["distance"])
             driver.on_road = 1
             driver.Request = request
         self.time += 1
-        if self.time >= 500:
+        if self.time >= self.final_time:
             self.done = True
         return self._state(), r, self.done, {}
 

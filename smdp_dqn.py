@@ -5,9 +5,9 @@ from area import AreaInfo
 
 
 class SMDPDQN(DoubleDQN):
-
     def __init__(self, *args, **kvargs):
         super().__init__(*args, **kvargs)
+        self.fairness_discount = 0.9
 
     def _fit_standard(self, dataset, approximator=None):
         self._replay_memory.add(dataset)
@@ -35,24 +35,32 @@ class SMDPDQN(DoubleDQN):
             for i in range(len(rt)):
                 r = 0
                 if len(rt[i]) == 0:
-                    reward.append(r)
+                    r = 0
                 else:
                     for j in range(len(rt[i])):
                         r += rt[i][j]
-                    reward.append(r)
-            print("rt")
-            print(reward)
-            print("q_next")
-            print(q_next)
+                arr = []
+                for p in range(len(state[i])):
+                    arr.append(state[i][p][3])
+                arr = np.array(arr)
+                fairness = np.std(arr)
+                reward.append(r - fairness * self.fairness_discount)
             print(self.mdp_info.gamma * q_next)
-            q = reward + self.mdp_info.gamma * q_next
-            td_error = q - self.approximator.predict(state, action)
+            ###
+            actions = [[]]
+            for i in range(5):
+                actions.append([])
+            for a in action:
+                for i in range(5):
+                    actions[i].append([a[i]])
+            for i in range(5):
+                q = reward + self.mdp_info.gamma * q_next
+                td_error = q - self.approximator.predict(state, np.array(actions[i]))
 
-            self._replay_memory.update(td_error, idxs)
-
-            if approximator is None:
-                self.approximator.fit(state, action, q, weights=is_weight,
-                                      **self._fit_params)
-            else:
-                approximator.fit(state, action, q, weights=is_weight,
-                                 **self._fit_params)
+                self._replay_memory.update(td_error, idxs)
+                if approximator is None:
+                    self.approximator.fit(state, np.array(actions[i]), q, weights=is_weight,
+                                          **self._fit_params)
+                else:
+                    approximator.fit(state, np.array(actions[i]), q, weights=is_weight,
+                                     **self._fit_params)

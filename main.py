@@ -5,7 +5,6 @@ from time import time
 import json
 import os
 
-import pandas as pd
 import networkx as nx
 import numpy as np
 import torch
@@ -38,10 +37,14 @@ class MyCore(Core):
                                                 driver.Request.destination)["distance"] / driver.speed <= driver.start_time:
                     driver.on_road = 0
                     driver.pos = driver.Request.destination
-
+                    driver.money += self.mdp.graph.get_edge_data(driver.Request.origin,
+                                                driver.Request.destination)["distance"]
+        actions = []
+        for idx in range(len(self.mdp.drivers)):
+            action = self.agent.draw_action(self._state)
+            actions.append(action[0])
         # 选出来的点
-        action = self.agent.draw_action(self._state)
-        next_state, reward, absorbing, _ = self.mdp.step(action)
+        next_state, reward, absorbing, _ = self.mdp.step(actions)
 
         self._episode_steps += 1
 
@@ -51,7 +54,7 @@ class MyCore(Core):
         state = self._state
         self._state = next_state.copy()
 
-        return state, action, reward, next_state, absorbing, last
+        return state, actions, reward, next_state, absorbing, last
 
 
 class ResourceObservation:
@@ -83,7 +86,7 @@ class ResourceObservation:
                 6.state[i,3] 每个司机的收益
             '''
             state[i, 0] = 1 if driver.on_road == 0 else 0
-            state[i, 1] = len(env.graph)
+            state[i, 1] = env.drivers[i].pos if env.drivers[i].on_road == 0 else -1
             state[i, 2] = env.time
             state[i, 3] = env.drivers[i].money
 
@@ -186,7 +189,7 @@ class GraphConvolutionResourceNetwork(nn.Module):
         self.actions_num = len(env.graph.nodes)
 
     def __init__(self, input_shape, output_shape,
-                 graph=None, resource_embeddings=0, nn_scaling=False, nodes_num=0,
+                 graph=None, resource_embeddings=0, nn_scaling=False, nodes_num=0,driver_nums=0,
                  **kwargs):
         super().__init__()
 
@@ -205,23 +208,19 @@ class GraphConvolutionResourceNetwork(nn.Module):
                     print("valid" + node1, node2)
                 self.distances[node1][node2] = nx.shortest_path_length(graph, node1, node2)
         has_nan = torch.isnan(self.distances).any()
-        if has_nan:
-            print("dis contains NaN values")
-        else:
-            print("dis does not contain NaN values")
 
         if nn_scaling:
             self.scaling = torch.nn.Sequential(
                 torch.nn.Linear(1, self.n_scaling_features),
                 torch.nn.Sigmoid(),
-                torch.nn.Linear(self.n_scaling_features, 50),
+                torch.nn.Linear(self.n_scaling_features, driver_nums),
                 torch.nn.Sigmoid()
             )
         else:
             self.scaling = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
             self.scaling.data.uniform_()
 
-        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(50, resource_embeddings),
+        self.resource_embeddings = torch.nn.Parameter(data=torch.Tensor(driver_nums, resource_embeddings),
                                                       requires_grad=True)
         self.resource_embeddings.data.uniform_()
         self.init_encoding = torch.nn.Sequential(
@@ -311,6 +310,7 @@ def compute_J(dataset, gamma=1.):
     utilityList = list()
     ulity = 0
     for i in range(len(dataset)):
+        print(dataset[i][0])
         x = dataset[i][2]
         if len(x) != 0:
             rewardList.append(x)
@@ -397,6 +397,7 @@ def experiment(mdp, params, prob=None):
         output_shape=(mdp.info.action_space.n,),
         n_actions=mdp.info.action_space.n,
         nodes_num=mdp.info.action_space.n,
+        driver_nums= params['driver_nums'],
         n_features=params['hidden'],
         # 256
         optimizer=optimizer,
@@ -473,10 +474,6 @@ def experiment(mdp, params, prob=None):
         if isinstance(agent, DQN):
             np.save(folder_name + '/weights-exp-0-0.npy',
                     agent.approximator.get_weights())
-
-    best_score = -np.inf
-    no_improvement = 0
-    patience = 6
 
     if params['save']:
         np.save(folder_name + '/scores.npy', scores)
@@ -564,7 +561,12 @@ def train_top(external_params=None):
         'use_weekdays': False,
         'save': True,
         'cuda': torch.cuda.is_available(),
-        'name': time_str
+        'name': time_str,
+        'driver_nums': 5,
+        # 一个step跑多少时间
+        'final_time': 5000,
+        'fairness_discount': 0.4,
+        'driver_speed': 50
     }
 
     if external_params is not None:
@@ -586,7 +588,7 @@ def train_top(external_params=None):
     torch.manual_seed(params['seed'])
 
     observation = ResourceObservation(use_weekdays=params['use_weekdays'])
-    mdp = TopEnvironment(params['gamma'], 50, 50, observation, 0, 1)
+    mdp = TopEnvironment(params['gamma'], params['driver_nums'], params['driver_speed'], observation, 0, 1,params['final_time'])
     observation.init(mdp)
     experiment(mdp, params, prob=None)
 
@@ -657,7 +659,7 @@ if __name__ == '__main__':
         'target_update_frequency': 50000,
         'evaluation_frequency': 100,
         'average_updates': 8,
-        'max_steps': 100000,
+        'max_steps': 5000,
         'initial_exploration_rate': 1.,
         'exploration_rate': .1,
         'final_exploration_rate': .01,
@@ -670,5 +672,9 @@ if __name__ == '__main__':
         'use_weekdays': False,
         'save': True,
         'cuda': False,
-        'name': time_str
+        'name': time_str,
+        'driver_nums': 5,
+        # 一个step跑多少时间
+        'final_time': 50,
+        'driver_speed': 9000
     })

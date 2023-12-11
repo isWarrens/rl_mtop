@@ -81,7 +81,8 @@ def import_requests_from_csv():
         if timestamp >= len(requests):
             requests.append([])
         request = Request(timestamp, destination, origin)
-        requests[timestamp].append(request)
+        if request != origin:
+            requests[timestamp].append(request)
     return requests
 
 
@@ -126,6 +127,7 @@ def change_csv():
 
     # 覆盖原始文件
     shutil.move(temp_file.name, data_dir)
+
 
 
 if __name__ == '__main__':
