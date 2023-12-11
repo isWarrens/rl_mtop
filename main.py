@@ -33,12 +33,14 @@ class MyCore(Core):
         for driver in self.mdp.drivers:
             if driver.on_road == 1:
                 driver.start_time += self.mdp.timestep
-                if self.mdp.graph.get_edge_data(driver.Request.origin,
-                                                driver.Request.destination)["distance"] / driver.speed <= driver.start_time:
+                if (self.mdp.graph.get_edge_data(driver.Request.origin, driver.Request.destination)["distance"] -
+                    self.mdp.graph.get_edge_data(driver.pos,
+                                                 driver.Request.origin)[
+                        "distance"]) / driver.speed <= driver.start_time:
                     driver.on_road = 0
                     driver.pos = driver.Request.destination
                     driver.money += self.mdp.graph.get_edge_data(driver.Request.origin,
-                                                driver.Request.destination)["distance"]
+                                                                 driver.Request.destination)["distance"]
         actions = []
         for idx in range(len(self.mdp.drivers)):
             action = self.agent.draw_action(self._state)
@@ -189,7 +191,7 @@ class GraphConvolutionResourceNetwork(nn.Module):
         self.actions_num = len(env.graph.nodes)
 
     def __init__(self, input_shape, output_shape,
-                 graph=None, resource_embeddings=0, nn_scaling=False, nodes_num=0,driver_nums=0,
+                 graph=None, resource_embeddings=0, nn_scaling=False, nodes_num=0, driver_nums=0,
                  **kwargs):
         super().__init__()
 
@@ -325,6 +327,8 @@ def compute_J(dataset, gamma=1.):
     arr = np.array(arr)
     fairness = np.std(arr)
     return rewardList, utilityList, fairness
+
+
 def experiment(mdp, params, prob=None):
     # Argument parser
     # parser = argparse.ArgumentParser()
@@ -401,7 +405,7 @@ def experiment(mdp, params, prob=None):
         output_shape=(mdp.info.action_space.n,),
         n_actions=mdp.info.action_space.n,
         nodes_num=mdp.info.action_space.n,
-        driver_nums= params['driver_nums'],
+        driver_nums=params['driver_nums'],
         n_features=params['hidden'],
         # 256
         optimizer=optimizer,
@@ -523,7 +527,7 @@ def experiment(mdp, params, prob=None):
     pi.set_epsilon(epsilon_test)
     eval_days = [39]
     ds = core.evaluate(initial_states=eval_days, render=params['save'], quiet=tuning)
-    rewardList, ulity,fairness = compute_J(ds, params['gamma'])
+    rewardList, ulity, fairness = compute_J(ds, params['gamma'])
     print("---ulity------")
     print(ulity)
     print("----fairness---")
@@ -597,7 +601,8 @@ def train_top(external_params=None):
     torch.manual_seed(params['seed'])
 
     observation = ResourceObservation(use_weekdays=params['use_weekdays'])
-    mdp = TopEnvironment(params['gamma'], params['driver_nums'], params['driver_speed'], observation, 0, 1,params['final_time'])
+    mdp = TopEnvironment(params['gamma'], params['driver_nums'], params['driver_speed'], observation, 0, 1,
+                         params['final_time'])
     observation.init(mdp)
     experiment(mdp, params, prob=None)
 
@@ -684,6 +689,6 @@ if __name__ == '__main__':
         'name': time_str,
         'driver_nums': 5,
         # 一个step跑多少时间
-        'final_time': 50,
-        'driver_speed': 9000
+        'final_time': 500,
+        'driver_speed': 900
     })
