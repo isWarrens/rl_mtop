@@ -513,14 +513,6 @@ def experiment(mdp, params, prob=None):
         print(rewardList)
         print(fairness)
 
-        # if params['save']:
-        #     mdp.save_rendered(folder_name + ("/epoch%04d.mp4" % n_epoch))
-
-        # else:
-        #     no_improvement += 1
-        #     if no_improvement >= patience:
-        #         break
-
     print('---------- FINAL EVALUATION ---------')
     agent.approximator.set_weights(best_weights)
     agent.target_approximator.set_weights(best_weights)
@@ -673,7 +665,7 @@ if __name__ == '__main__':
         'target_update_frequency': 50000,
         'evaluation_frequency': 100,
         'average_updates': 8,
-        'max_steps': 5000,
+        'max_steps': 2000,
         'initial_exploration_rate': 1.,
         'exploration_rate': .1,
         'final_exploration_rate': .01,
@@ -687,8 +679,8 @@ if __name__ == '__main__':
         'save': True,
         'cuda': False,
         'name': time_str,
-        'driver_nums': 5,
+        'driver_nums': 10,
         # 一个step跑多少时间
-        'final_time': 500,
-        'driver_speed': 900
+        'final_time': 50,
+        'driver_speed': 90
     })

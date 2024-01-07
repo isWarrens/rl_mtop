@@ -48,12 +48,12 @@ class SMDPDQN(DoubleDQN):
             print(self.mdp_info.gamma * q_next)
             ###
             actions = [[]]
-            for i in range(5):
+            for i in range(len(state[0]) - 1):
                 actions.append([])
             for a in action:
-                for i in range(5):
+                for i in range(len(state[0]) - 1):
                     actions[i].append([a[i]])
-            for i in range(5):
+            for i in range(len(state[0]) - 1):
                 q = reward + self.mdp_info.gamma * q_next
                 td_error = q - self.approximator.predict(state, np.array(actions[i]))
 
